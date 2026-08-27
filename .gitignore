@@ -1,0 +1,149 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pdb
+*.egg*
+*.manifest
+*.spec
+
+# Virtual environment
+.venv/
+.pytest_cache/
+venv/
+.env
+.linenv/
+linenv/
+wenv/
+livenv/
+scratch/
+
+.wenv/
+
+ENV/
+env/
+
+# Django
+*.log
+*.pot
+*.pyc
+*.sqlite3
+db.sqlite3
+celerybeat-schedule
+media/
+staticfiles/
+static/
+devenv/
+graphify-out/
+
+# Environment variables / secrets
+*.env
+.env.*
+!example.env
+
+# IDE + tools
+.vscode/
+.idea/
+*.iml
+graphify-out/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Migrations (optional — uncomment only if auto-generated)
+# */migrations/*.py
+# !*/migrations/__init__.py
+
+# Cache
+.cache/
+pytest_cache/
+
+
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+=======
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pdb
+*.egg*
+*.manifest
+*.spec
+
+# Virtual environment
+.venv/
+venv/
+.env
+.linenv/
+linenv/
+wenv/
+.wenv/
+livenv/
+.livenv/
+
+
+ENV/
+env/
+
+# Django
+*.log
+*.pot
+*.pyc
+*.sqlite3
+db.sqlite3
+celerybeat-schedule
+media/
+staticfiles/
+static/
+devenv/
+graphify-out/
+
+# Environment variables / secrets
+*.env
+.env.*
+!example.env
+
+# IDE + tools
+.vscode/
+.idea/
+*.iml
+graphify-out/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Migrations (optional — uncomment only if auto-generated)
+# */migrations/*.py
+# !*/migrations/__init__.py
+
+# Cache
+.cache/
+pytest_cache/
+
+
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
