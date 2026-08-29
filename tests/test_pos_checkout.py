@@ -158,3 +158,109 @@ class POSCheckoutTestCase(TransactionTestCase):
             self.assertIsNotNone(trans)
             self.assertEqual(trans.amount, Decimal("3600.00"))
             self.assertEqual(trans.balance_after, Decimal("6400.00"))
+
+    def test_checkout_blocked_without_open_session(self):
+        """Checkout fails with error if cashier does not have an open cash session."""
+        response = self.client.post("/api/pharmacy/pos/checkout/", {
+            "items": [{"product_id": self.product.id, "quantity": 1}],
+            "payment_method": "ESPECE",
+            "amount_received": "2000.00",
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Aucune session de caisse ouverte", str(response.data))
+
+    def test_session_open_rejected_if_already_open(self):
+        """Cannot open a second cash session if an existing session is currently OPEN."""
+        # 1. First open succeeds
+        resp1 = self.client.post("/api/pharmacy/pos/session/open/", {"initial_cash": "15000.00"}, format="json")
+        self.assertEqual(resp1.status_code, 201)
+
+        # 2. Second open is rejected with HTTP 400
+        resp2 = self.client.post("/api/pharmacy/pos/session/open/", {"initial_cash": "20000.00"}, format="json")
+        self.assertEqual(resp2.status_code, 400)
+        self.assertEqual(resp2.data["code"], "SESSION_ALREADY_OPEN")
+
+    def test_top_products_and_sales_filtering(self):
+        """Tests top 10 most sold products endpoint and filtering sales by cashier_username."""
+        with tenant_context(self.pharmacy.id):
+            # Open cash session
+            self.client.post("/api/pharmacy/pos/session/open/", {"initial_cash": "10000.00"}, format="json")
+
+            # Perform a sale of 3 units of Spasfon
+            self.client.post("/api/pharmacy/pos/checkout/", {
+                "items": [{"product_id": self.product.id, "quantity": 3}],
+                "payment_method": "ESPECE",
+                "amount_received": "6000.00",
+            }, format="json")
+
+            # 1. Check top products endpoint
+            top_resp = self.client.get("/api/pharmacy/pos/top-products/")
+            self.assertEqual(top_resp.status_code, 200)
+            self.assertTrue(len(top_resp.data) >= 1)
+            top_item = top_resp.data[0]
+            self.assertEqual(top_item["name"], "Spasfon Lyoc 80mg")
+            self.assertEqual(top_item["total_units_sold"], 3)
+
+            # 2. Check sales filtering by cashier_username
+            sales_resp = self.client.get("/api/pharmacy/pos/sales/?cashier_username=caissiere_awa")
+            self.assertEqual(sales_resp.status_code, 200)
+            self.assertEqual(len(sales_resp.data["results"]), 1)
+            self.assertEqual(sales_resp.data["results"][0]["cashier_username"], "caissiere_awa")
+
+            # Non-existent cashier returns empty
+            empty_resp = self.client.get("/api/pharmacy/pos/sales/?cashier_username=inconnu")
+            self.assertEqual(empty_resp.status_code, 200)
+            self.assertEqual(len(empty_resp.data["results"]), 0)
+
+    def test_split_payment_espece_and_wave(self):
+        """Test multi-payment (e.g. Total 17,000 FCFA -> ESPECE: 10,000 + WAVE: 7,000)."""
+        with tenant_context(self.pharmacy.id):
+            # Create a 17,000 FCFA product
+            costly_product = PharmacyProduct.objects.create(
+                tenant=self.pharmacy,
+                barcode="3400939999999",
+                name="Tensiomètre Électronique",
+                purchase_price_ht=Decimal("12000.00"),
+                selling_price=Decimal("17000.00"),
+            )
+            ProductBatch.objects.create(
+                tenant=self.pharmacy,
+                product=costly_product,
+                batch_number="LOT-TENSIO",
+                expiration_date=date.today() + timedelta(days=365),
+                quantity_received=10,
+                quantity_current=10,
+            )
+
+            # Open session with 20,000 FCFA
+            session_resp = self.client.post("/api/pharmacy/pos/session/open/", {
+                "initial_cash": "20000.00"
+            }, format="json")
+            session_id = session_resp.data["id"]
+
+            # Perform Split Payment: 10,000 ESPECE + 7,000 WAVE
+            checkout_payload = {
+                "items": [
+                    {"product_id": costly_product.id, "quantity": 1}
+                ],
+                "payment_method": "MIXTE",
+                "payments": [
+                    {"method": "ESPECE", "amount": "10000.00"},
+                    {"method": "WAVE", "amount": "7000.00"}
+                ],
+                "amount_received": "10000.00"
+            }
+
+            response = self.client.post("/api/pharmacy/pos/checkout/", checkout_payload, format="json")
+            self.assertEqual(response.status_code, 201)
+            self.assertEqual(Decimal(str(response.data["total_ttc"])), Decimal("17000.00"))
+            self.assertEqual(response.data["payment_method"], "MIXTE")
+            self.assertEqual(len(response.data["payment_details"]), 2)
+            self.assertEqual(response.data["payment_details"][0], {"method": "ESPECE", "amount": "10000.00"})
+            self.assertEqual(response.data["payment_details"][1], {"method": "WAVE", "amount": "7000.00"})
+
+            # Cash session expected cash should only increase by the 10,000 FCFA cash portion!
+            session = CashSession.objects.get(id=session_id)
+            self.assertEqual(session.expected_cash, Decimal("30000.00")) # 20000 + 10000
+
+

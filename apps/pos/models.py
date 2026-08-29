@@ -130,6 +130,11 @@ class Sale(TenantModel):
         default="ESPECE",
         verbose_name=_("Mode de paiement")
     )
+    payment_details = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name=_("Détail des paiements (Paiement mixte)")
+    )
     amount_received = models.DecimalField(
         max_digits=12,
         decimal_places=2,

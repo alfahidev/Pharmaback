@@ -6,19 +6,14 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-from drf_spectacular.views import (
-    SpectacularAPIView,
-    SpectacularSwaggerView,
-    SpectacularRedocView,
-)
+from core.views import health_check
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
+    # Health Check (Docker Swarm / Kubernetes / Load Balancer)
+    path("api/health/", health_check, name="health-check"),
 
-    # OpenAPI 3.0 Documentation
-    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
-    path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
-    path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
+    # Django Admin
+    path("admin/", admin.site.urls),
 
     # Authentication & User Management
     path("api/auth/", include("apps.authentication.urls")),
@@ -39,5 +34,19 @@ urlpatterns = [
     path("api/pharmacy/", include("apps.suppliers.urls")), # To support direct /api/pharmacy/orders/
 ]
 
+# OpenAPI 3.0 Documentation (Disabled on production unless ENABLE_SWAGGER=True)
+if getattr(settings, "ENABLE_SWAGGER", False):
+    from drf_spectacular.views import (
+        SpectacularAPIView,
+        SpectacularSwaggerView,
+        SpectacularRedocView,
+    )
+    urlpatterns += [
+        path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+        path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
+        path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
+    ]
+
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+

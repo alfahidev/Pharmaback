@@ -40,12 +40,16 @@ graphify-out/
 # Environment variables / secrets
 *.env
 .env.*
+*.csv
+*.dump
+*.sql
 !example.env
 
 # IDE + tools
 .vscode/
 .idea/
 *.iml
+
 graphify-out/
 
 # OS files

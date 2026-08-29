@@ -16,8 +16,8 @@ class MedicamentCatalogViewSet(viewsets.ModelViewSet):
     queryset = MedicamentCatalog.objects.filter(is_active=True)
     serializer_class = MedicamentCatalogSerializer
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ["barcode", "name", "dci", "default_category"]
-    ordering_fields = ["name", "barcode", "created_at"]
+    search_fields = ["barcode", "alternate_barcode", "name", "geo_code", "dci", "default_category"]
+    ordering_fields = ["name", "barcode", "geo_code", "created_at"]
     ordering = ["name"]
 
     def get_permissions(self):

@@ -50,6 +50,8 @@ class SaasTenantViewSet(viewsets.ModelViewSet):
         serializer = TenantSubscriptionSerializer(subscription, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
+        from django.core.cache import cache
+        cache.delete(f"sub_valid:{tenant.id}")
         return Response(serializer.data)
 
     @extend_schema(
@@ -70,6 +72,9 @@ class SaasTenantViewSet(viewsets.ModelViewSet):
         subscription.status = "ACTIVE"
         subscription.is_active = True
         subscription.save()
+
+        from django.core.cache import cache
+        cache.delete(f"sub_valid:{tenant.id}")
 
         return Response(TenantSubscriptionSerializer(subscription).data)
 

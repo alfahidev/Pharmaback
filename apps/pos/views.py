@@ -2,7 +2,7 @@
 Views for POS Caisse, Ultra-Fast Barcode Scanning, Checkout, and Cash Sessions.
 """
 from decimal import Decimal
-from django.db.models import Q
+from django.db.models import Q, Sum
 from django.utils import timezone
 from rest_framework import viewsets, permissions, status, filters
 from rest_framework.response import Response
@@ -16,6 +16,7 @@ from apps.pos.serializers import (
     CashSessionCloseSerializer,
     POSScanResponseSerializer,
     CheckoutRequestSerializer,
+    TopProductSerializer,
 )
 from apps.pos.services import process_pos_checkout
 from apps.inventory.models import PharmacyProduct
@@ -78,6 +79,79 @@ class POSScanView(TenantAPIView):
         return Response(data)
 
 
+class POSTopProductsView(TenantAPIView):
+    """
+    Returns the top 10 most sold products for rapid 1-click cart addition.
+    Falls back to top in-stock products if no sales history exists.
+    """
+    permission_classes = [IsCashierOrAbove]
+
+    @extend_schema(
+        summary="Top 10 des produits les plus vendus (accès rapide caisse)",
+        responses={200: TopProductSerializer(many=True)}
+    )
+    def get(self, request):
+        pharmacy = request.user.pharmacy
+        if not pharmacy:
+            return Response({"error": "Utilisateur non rattaché à une officine."}, status=status.HTTP_400_BAD_REQUEST)
+
+        cache_key = f"pos_top_products:{pharmacy.id}"
+        from django.core.cache import cache
+        cached_data = cache.get(cache_key)
+        if cached_data is not None:
+            return Response(cached_data)
+
+        # 1. Aggregate sold products from SaleItem
+        sold_agg = SaleItem.objects.filter(
+            tenant=pharmacy,
+            sale__status__in=["PAID", "CREDIT"]
+        ).values("product_id").annotate(
+            total_sold=Sum("quantity")
+        ).order_by("-total_sold")[:10]
+
+        top_product_ids = [item["product_id"] for item in sold_agg]
+        sold_count_map = {item["product_id"]: item["total_sold"] for item in sold_agg}
+
+        # 2. Fetch products
+        top_products = list(PharmacyProduct.objects.filter(
+            tenant=pharmacy,
+            id__in=top_product_ids,
+            is_active=True
+        ).prefetch_related("batches"))
+
+        # Sort by sold count descending
+        top_products.sort(key=lambda p: sold_count_map.get(p.id, 0), reverse=True)
+
+        # 3. If fewer than 10 products, fallback to top active products with stock
+        if len(top_products) < 10:
+            remaining_count = 10 - len(top_products)
+            excluded_ids = [p.id for p in top_products]
+            fallback = PharmacyProduct.objects.filter(
+                tenant=pharmacy,
+                is_active=True
+            ).exclude(id__in=excluded_ids).prefetch_related("batches")[:remaining_count]
+            top_products.extend(list(fallback))
+
+        data = []
+        for p in top_products:
+            data.append({
+                "id": p.id,
+                "barcode": p.barcode,
+                "alternate_barcode": p.alternate_barcode,
+                "name": p.name,
+                "shelf_location": p.shelf_location,
+                "selling_price": p.selling_price,
+                "total_stock": p.total_stock,
+                "is_low_stock": p.is_low_stock,
+                "is_expiring_soon": p.is_expiring_soon,
+                "total_units_sold": sold_count_map.get(p.id, 0),
+            })
+
+        # Cache top products for 5 minutes (invalidated on sale checkout)
+        cache.set(cache_key, data, timeout=300)
+        return Response(data)
+
+
 class POSCheckoutView(TenantAPIView):
     """
     Atomic Checkout Endpoint: Validates ticket, decrements FEFO batches,
@@ -104,14 +178,15 @@ class POSCheckoutView(TenantAPIView):
 
 class CashSessionOpenView(TenantAPIView):
     """
-    Opens a daily cash session for the cashier or retrieves the existing open session.
+    Opens a daily cash session for the cashier.
+    Rejects opening if a session is already OPEN for this cashier.
     """
     permission_classes = [IsCashierOrAbove]
 
     @extend_schema(
         summary="Ouvrir une session de caisse",
         request=CashSessionOpenSerializer,
-        responses={200: CashSessionSerializer}
+        responses={201: CashSessionSerializer}
     )
     def post(self, request):
         pharmacy = request.user.pharmacy
@@ -132,7 +207,11 @@ class CashSessionOpenView(TenantAPIView):
         ).first()
 
         if existing_session:
-            return Response(CashSessionSerializer(existing_session).data, status=status.HTTP_200_OK)
+            return Response({
+                "code": "SESSION_ALREADY_OPEN",
+                "error": "Une session de caisse est déjà ouverte pour ce caissier. Veuillez clôturer la session active avant d'en ouvrir une nouvelle.",
+                "session": CashSessionSerializer(existing_session).data
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         session = CashSession.objects.create(
             tenant=pharmacy,
@@ -212,12 +291,14 @@ class CurrentCashSessionView(TenantAPIView):
         if not session:
             return Response({"detail": "Aucune session ouverte actuellement.", "has_open_session": False}, status=status.HTTP_200_OK)
 
-        return Response(CashSessionSerializer(session).data)
+        data = CashSessionSerializer(session).data
+        data["has_open_session"] = True
+        return Response(data)
 
 
 class SaleViewSet(TenantModelViewSet):
     """
-    ViewSet for consulting and retrieving sales tickets.
+    ViewSet for consulting, searching, and filtering sales tickets.
     """
     queryset = Sale.objects.all().select_related("cash_session", "cashier", "customer").prefetch_related("items", "items__product", "items__batch")
     serializer_class = SaleSerializer
@@ -225,6 +306,24 @@ class SaleViewSet(TenantModelViewSet):
     search_fields = ["ticket_number", "customer__name", "cashier__username"]
     ordering_fields = ["created_at", "total_ttc"]
     ordering = ["-created_at"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        cashier_username = self.request.query_params.get("cashier_username")
+        date_str = self.request.query_params.get("date")
+        payment_method = self.request.query_params.get("payment_method")
+        session_id = self.request.query_params.get("session_id")
+
+        if cashier_username:
+            qs = qs.filter(cashier__username__iexact=cashier_username.strip())
+        if date_str:
+            qs = qs.filter(created_at__date=date_str.strip())
+        if payment_method:
+            qs = qs.filter(payment_method=payment_method.strip())
+        if session_id:
+            qs = qs.filter(cash_session_id=session_id)
+
+        return qs
 
 
 class CashSessionViewSet(TenantModelViewSet):
@@ -237,3 +336,4 @@ class CashSessionViewSet(TenantModelViewSet):
     search_fields = ["cashier__username", "session_date"]
     ordering_fields = ["session_date", "opened_at", "cash_difference"]
     ordering = ["-opened_at"]
+

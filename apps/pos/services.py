@@ -27,7 +27,7 @@ def process_pos_checkout(pharmacy, user, validated_data: dict) -> Sale:
     session_id = validated_data.get("session_id")
 
     with transaction.atomic():
-        # Step 1: Resolve Cash Session
+        # Step 1: Resolve Cash Session (Strictly required)
         if session_id:
             cash_session = CashSession.objects.filter(
                 tenant=pharmacy, id=session_id, status="OPEN"
@@ -39,16 +39,7 @@ def process_pos_checkout(pharmacy, user, validated_data: dict) -> Sale:
                 tenant=pharmacy, cashier=user, status="OPEN"
             ).first()
             if not cash_session:
-                # Auto-open cash session for today if none exists
-                cash_session = CashSession.objects.create(
-                    tenant=pharmacy,
-                    cashier=user,
-                    session_date=timezone.now().date(),
-                    initial_cash=Decimal("0.00"),
-                    expected_cash=Decimal("0.00"),
-                    status="OPEN",
-                    notes="Session ouverte automatiquement lors du premier encaissement.",
-                )
+                raise ValidationError("Aucune session de caisse ouverte pour ce caissier. Veuillez ouvrir la caisse avant d'effectuer un encaissement.")
 
         # Step 2: Resolve Customer Account if applicable
         customer = None
@@ -162,45 +153,111 @@ def process_pos_checkout(pharmacy, user, validated_data: dict) -> Sale:
                     notes=f"Vente hors lot / Déstockage partiel sans lot spécifié",
                 )
 
-        # Step 5: Finalize Sale Amounts
+        # Step 5: Finalize Sale Amounts and Payments (Split / Single)
         sale.total_ht = total_ht
         sale.total_tva = total_tva
         sale.total_ttc = total_ttc
 
-        if payment_method == "ESPECE" and amount_received >= total_ttc:
-            sale.change_returned = amount_received - total_ttc
+        payments_data = validated_data.get("payments", [])
+        if payments_data:
+            # Multi-Payment / Split Payment Mode
+            total_paid = sum(Decimal(str(p["amount"])) for p in payments_data)
+            if total_paid < total_ttc:
+                raise ValidationError(
+                    f"Le montant total cumulé des paiements ({total_paid} FCFA) est inférieur au montant total du ticket ({total_ttc} FCFA)."
+                )
+
+            sale.payment_method = "MIXTE" if len(payments_data) > 1 else payments_data[0]["method"]
+            formatted_details = []
+            has_client_account = False
+            total_cash_portion = Decimal("0.00")
+
+            for p in payments_data:
+                method = p["method"]
+                amount = Decimal(str(p["amount"]))
+                formatted_details.append({
+                    "method": method,
+                    "amount": str(amount),
+                })
+
+                if method == "ESPECE":
+                    total_cash_portion += amount
+                    cash_session.expected_cash += amount
+                    cash_session.save()
+
+                elif method == "COMPTE_CLIENT":
+                    has_client_account = True
+                    if not customer:
+                        raise ValidationError("Un compte client valide est obligatoire pour un règlement sur compte client.")
+                    can_charge, reason = customer.can_charge(amount)
+                    if not can_charge:
+                        raise ValidationError(reason)
+                    customer.current_balance -= amount
+                    customer.save()
+                    CustomerTransaction.objects.create(
+                        tenant=pharmacy,
+                        customer=customer,
+                        sale=sale,
+                        transaction_type="PURCHASE",
+                        payment_method="COMPTE_CLIENT",
+                        amount=amount,
+                        balance_after=customer.current_balance,
+                        note=f"Paiement partiel Ticket {sale.ticket_number}",
+                        created_by=user,
+                    )
+
+            sale.payment_details = formatted_details
+
+            # Handle change returned on cash portion if amount_received > total_cash_portion
+            if total_cash_portion > 0 and amount_received > total_cash_portion:
+                sale.change_returned = amount_received - total_cash_portion
+            elif total_cash_portion == Decimal("0.00") and amount_received > total_ttc:
+                sale.change_returned = amount_received - total_ttc
+            else:
+                sale.change_returned = Decimal("0.00")
+
+            sale.status = "CREDIT" if (has_client_account and len(payments_data) == 1) else "PAID"
+
         else:
-            sale.change_returned = Decimal("0.00")
+            # Single Payment Mode (Backward compatible)
+            sale.payment_method = payment_method
+            sale.payment_details = [{"method": payment_method, "amount": str(total_ttc)}]
+
+            if payment_method == "ESPECE":
+                if amount_received >= total_ttc:
+                    sale.change_returned = amount_received - total_ttc
+                else:
+                    sale.change_returned = Decimal("0.00")
+                cash_session.expected_cash += total_ttc
+                cash_session.save()
+
+            elif payment_method == "COMPTE_CLIENT":
+                if not customer:
+                    raise ValidationError("Un compte client valide est obligatoire pour le paiement par compte/crédit.")
+                can_charge, reason = customer.can_charge(total_ttc)
+                if not can_charge:
+                    raise ValidationError(reason)
+                customer.current_balance -= total_ttc
+                customer.save()
+                CustomerTransaction.objects.create(
+                    tenant=pharmacy,
+                    customer=customer,
+                    sale=sale,
+                    transaction_type="PURCHASE",
+                    payment_method="COMPTE_CLIENT",
+                    amount=total_ttc,
+                    balance_after=customer.current_balance,
+                    note=f"Achat comptoir Ticket {sale.ticket_number}",
+                    created_by=user,
+                )
+                sale.status = "CREDIT"
+            else:
+                sale.change_returned = Decimal("0.00")
 
         sale.save()
 
-        # Step 6: Process Payment Method Specifics
-        if payment_method == "COMPTE_CLIENT":
-            if not customer:
-                raise ValidationError("Un compte client valide est obligatoire pour le paiement par compte/crédit.")
-
-            can_charge, reason = customer.can_charge(total_ttc)
-            if not can_charge:
-                raise ValidationError(reason)
-
-            customer.current_balance -= total_ttc
-            customer.save()
-
-            CustomerTransaction.objects.create(
-                tenant=pharmacy,
-                customer=customer,
-                sale=sale,
-                transaction_type="PURCHASE",
-                payment_method="COMPTE_CLIENT",
-                amount=total_ttc,
-                balance_after=customer.current_balance,
-                note=f"Achat comptoir Ticket {sale.ticket_number}",
-                created_by=user,
-            )
-
-        elif payment_method == "ESPECE":
-            # Increment expected cash in session
-            cash_session.expected_cash += total_ttc
-            cash_session.save()
+        # Invalidate cached top products for this pharmacy
+        from django.core.cache import cache
+        cache.delete(f"pos_top_products:{pharmacy.id}")
 
         return sale

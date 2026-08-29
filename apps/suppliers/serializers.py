@@ -13,6 +13,8 @@ class SupplierSerializer(serializers.ModelSerializer):
             "name",
             "phone",
             "address",
+            "contact_person",
+            "order_website_url",
             "is_active",
             "created_at",
             "updated_at",

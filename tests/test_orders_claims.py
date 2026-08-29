@@ -49,6 +49,28 @@ class SuppliersAndOrdersTestCase(TransactionTestCase):
                 reorder_threshold=20, # Stock is 0 -> Low stock
             )
 
+    def test_create_and_list_supplier(self):
+        """Pharmacy can create and list wholesaler suppliers via POST and GET /api/pharmacy/suppliers/."""
+        # 1. Create supplier via POST /api/pharmacy/suppliers/
+        create_resp = self.client.post("/api/pharmacy/suppliers/", {
+            "name": "Cophase Sénégal",
+            "phone": "338320000",
+            "address": "Zone Industrielle Dakar",
+            "contact_person": "Mme Sow",
+            "order_website_url": "https://portail.cophase.sn",
+        }, format="json")
+        self.assertEqual(create_resp.status_code, 201)
+        self.assertEqual(create_resp.data["name"], "Cophase Sénégal")
+        self.assertEqual(create_resp.data["phone"], "338320000")
+        self.assertEqual(create_resp.data["contact_person"], "Mme Sow")
+
+        # 2. List suppliers via GET /api/pharmacy/suppliers/
+        list_resp = self.client.get("/api/pharmacy/suppliers/")
+        self.assertEqual(list_resp.status_code, 200)
+        names = [s["name"] for s in list_resp.data["results"]] if "results" in list_resp.data else [s["name"] for s in list_resp.data]
+        self.assertIn("Cophase Sénégal", names)
+        self.assertIn("Laborex Sénégal", names)
+
     def test_generate_order_from_sales(self):
         """Auto-generates draft purchase order proposition for products below critical threshold."""
         with tenant_context(self.pharmacy.id):

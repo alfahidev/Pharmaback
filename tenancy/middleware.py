@@ -85,6 +85,7 @@ class SubscriptionCheckMiddleware:
     """
 
     EXEMPT_PATHS = (
+        "/api/health/",
         "/admin/",
         "/api/schema/",
         "/api/docs/",
@@ -112,11 +113,20 @@ class SubscriptionCheckMiddleware:
 
             pharmacy = getattr(user, "pharmacy", None)
             if pharmacy:
-                # Refresh from db to get latest status in test environments
-                subscription = getattr(pharmacy, "subscription", None)
-                if subscription:
-                    subscription.refresh_from_db()
-                if not subscription or not subscription.is_currently_valid():
+                from django.core.cache import cache
+                sub_cache_key = f"sub_valid:{pharmacy.id}"
+                is_valid = cache.get(sub_cache_key)
+
+                if is_valid is None:
+                    subscription = getattr(pharmacy, "subscription", None)
+                    if subscription:
+                        subscription.refresh_from_db()
+                    is_valid = bool(subscription and subscription.is_currently_valid())
+                    # Cache validity state for 60 seconds
+                    cache.set(sub_cache_key, is_valid, timeout=60)
+
+                if not is_valid:
+                    subscription = getattr(pharmacy, "subscription", None)
                     return JsonResponse(
                         {
                             "detail": "Abonnement de l'officine inactif, expiré ou suspendu. Veuillez contacter le propriétaire de la plateforme.",

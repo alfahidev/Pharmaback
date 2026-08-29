@@ -27,6 +27,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             token["tenant_id"] = str(user.pharmacy.id)
             token["pharmacy_name"] = user.pharmacy.name
             token["pharmacy_code"] = user.pharmacy.code
+            token["pharmacy_auto_print"] = user.pharmacy.auto_print
             subscription = getattr(user.pharmacy, "subscription", None)
             if subscription:
                 token["subscription_status"] = subscription.status
@@ -58,6 +59,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                 "name": user.pharmacy.name if user.pharmacy else None,
                 "code": user.pharmacy.code if user.pharmacy else None,
                 "is_active": user.pharmacy.is_active if user.pharmacy else None,
+                "auto_print": user.pharmacy.auto_print if user.pharmacy else None,
             } if user.pharmacy else None,
         }
 

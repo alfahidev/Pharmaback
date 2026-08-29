@@ -14,9 +14,23 @@ class MedicamentCatalog(models.Model):
         max_length=64,
         unique=True,
         db_index=True,
-        verbose_name=_("Code-barres / Code CIP (EAN-13)")
+        verbose_name=_("Code 1 / Code-barres principal (EAN-13/CIP)")
     )
-    name = models.CharField(max_length=255, db_index=True, verbose_name=_("Nom commercial"))
+    alternate_barcode = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        db_index=True,
+        verbose_name=_("Code 2 / Code alternatif")
+    )
+    geo_code = models.CharField(
+        max_length=128,
+        blank=True,
+        default="",
+        db_index=True,
+        verbose_name=_("Code géo / Rayon indicatif")
+    )
+    name = models.CharField(max_length=255, db_index=True, verbose_name=_("Label / Nom commercial"))
     dci = models.CharField(
         max_length=255,
         blank=True,
@@ -35,7 +49,7 @@ class MedicamentCatalog(models.Model):
         blank=True,
         default="",
         db_index=True,
-        verbose_name=_("Famille thérapeutique")
+        verbose_name=_("Famille thérapeutique (Optionnelle)")
     )
     is_active = models.BooleanField(default=True, verbose_name=_("Actif au catalogue"))
     created_at = models.DateTimeField(auto_now_add=True)

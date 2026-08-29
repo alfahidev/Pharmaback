@@ -51,6 +51,7 @@ class SaleSerializer(serializers.ModelSerializer):
             "total_ttc",
             "payment_method",
             "payment_method_display",
+            "payment_details",
             "amount_received",
             "change_returned",
             "status",
@@ -122,12 +123,42 @@ class CheckoutItemSerializer(serializers.Serializer):
     unit_price = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
 
 
+class PaymentSplitSerializer(serializers.Serializer):
+    method = serializers.ChoiceField(
+        choices=[
+            ("ESPECE", "Espèces"),
+            ("WAVE", "Wave"),
+            ("OMONEY", "Orange Money"),
+            ("COMPTE_CLIENT", "Compte Client"),
+            ("CARTE_BANCAIRE", "Carte Bancaire"),
+            ("CHEQUE", "Chèque"),
+        ]
+    )
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("0.01"))
+
+
 class CheckoutRequestSerializer(serializers.Serializer):
     items = CheckoutItemSerializer(many=True)
     payment_method = serializers.ChoiceField(
         choices=Sale.PAYMENT_METHOD_CHOICES,
-        default="ESPECE"
+        default="ESPECE",
+        required=False
     )
+    payments = PaymentSplitSerializer(many=True, required=False, default=list)
     customer_id = serializers.IntegerField(required=False, allow_null=True)
     amount_received = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=Decimal("0.00"))
     session_id = serializers.IntegerField(required=False, allow_null=True)
+
+
+class TopProductSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    barcode = serializers.CharField()
+    alternate_barcode = serializers.CharField(allow_blank=True)
+    name = serializers.CharField()
+    shelf_location = serializers.CharField(allow_blank=True)
+    selling_price = serializers.DecimalField(max_digits=12, decimal_places=2)
+    total_stock = serializers.IntegerField()
+    is_low_stock = serializers.BooleanField()
+    is_expiring_soon = serializers.BooleanField()
+    total_units_sold = serializers.IntegerField()
+

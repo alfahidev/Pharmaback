@@ -343,7 +343,72 @@ pharmaback-frontend/
 
 ---
 
-### 3. Gestion de l'Équipe d'Officine (Par le Titulaire)
+### 3. Répertoire National des Médicaments (`/api/catalog/`)
+Base de référence commune à toutes les officines (3 991 références). Sans prix ni quantité (propres aux officines).
+
+#### `GET /api/catalog/` (Recherche Médicament National)
+- **Query Params :**
+  - `?search=4042809000733` *(Recherche par Code 1, Code 2, Code géo ou Nom)*
+  - `?ordering=name`
+- **Response JSON (200 OK) :**
+```json
+[
+  {
+    "id": 1,
+    "barcode": "4042809000733",
+    "alternate_barcode": "4042809000733",
+    "geo_code": "CH",
+    "name": "BANDE HYPAFIX ADH 10M X10",
+    "dci": "",
+    "form_dosage": "",
+    "default_category": "",
+    "is_active": true
+  },
+  {
+    "id": 2,
+    "barcode": "8436024611748",
+    "alternate_barcode": "8436024612615",
+    "geo_code": "RAYON AMPOULE",
+    "name": "POTENCIATOR 5G AMP BUV B/20",
+    "dci": "",
+    "form_dosage": "",
+    "default_category": "",
+    "is_active": true
+  }
+]
+```
+
+#### `POST /api/catalog/` (Ajout Médicament - SaaS Owner Uniquement)
+- **Body JSON :**
+```json
+{
+  "barcode": "8436024611748",
+  "alternate_barcode": "8436024612615",
+  "geo_code": "RAYON AMPOULE",
+  "name": "POTENCIATOR 5G AMP BUV B/20"
+}
+```
+*(Remarque : `default_category`, `dci`, `form_dosage` et `alternate_barcode` sont optionnels).*
+- **Response JSON (201 Created) :**
+```json
+{
+  "id": 2,
+  "barcode": "8436024611748",
+  "alternate_barcode": "8436024612615",
+  "geo_code": "RAYON AMPOULE",
+  "name": "POTENCIATOR 5G AMP BUV B/20",
+  "dci": "",
+  "form_dosage": "",
+  "default_category": "",
+  "is_active": true,
+  "created_at": "2026-08-27T18:00:00Z",
+  "updated_at": "2026-08-27T18:00:00Z"
+}
+```
+
+---
+
+### 4. Gestion de l'Équipe d'Officine (Par le Titulaire)
 
 #### `POST /api/auth/users/`
 - **Option 1 & 2 (Mot de passe généré ou saisi sur place) :**
@@ -362,7 +427,7 @@ pharmaback-frontend/
 
 ---
 
-### 4. Stock, Produits & Alertes Péremption
+### 5. Stock, Produits & Alertes Péremption
 
 #### `GET /api/pharmacy/inventory/products/?low_stock=true|false&expiring_soon=true|false&search=Doliprane`
 - **Response JSON (200 OK) :**
@@ -485,7 +550,38 @@ pharmaback-frontend/
 
 ---
 
-### 5. Point de Vente (POS) & Sessions de Caisse
+### 6. Point de Vente (POS), Sessions de Caisse & Ventes
+
+#### `GET /api/pharmacy/pos/top-products/` (Les 10 Produits Phares - Quick-Add POS)
+- **Response JSON (200 OK) :**
+```json
+[
+  {
+    "id": 1,
+    "barcode": "3400930000010",
+    "alternate_barcode": "CIP10",
+    "name": "Doliprane 1000mg Comprimés",
+    "shelf_location": "RAYON-A1",
+    "selling_price": "1500.00",
+    "total_stock": 48,
+    "is_low_stock": false,
+    "is_expiring_soon": false,
+    "total_units_sold": 340
+  },
+  {
+    "id": 2,
+    "barcode": "3400930000030",
+    "alternate_barcode": "CIP30",
+    "name": "Efferalgan 1g Effervescent",
+    "shelf_location": "RAYON-A2",
+    "selling_price": "1400.00",
+    "total_stock": 25,
+    "is_low_stock": false,
+    "is_expiring_soon": false,
+    "total_units_sold": 215
+  }
+]
+```
 
 #### `GET /api/pharmacy/pos/scan/?barcode=3400930000010` (Temps < 20ms)
 - **Response JSON (200 OK) :**
@@ -505,12 +601,67 @@ pharmaback-frontend/
 }
 ```
 
+#### `GET /api/pharmacy/pos/session/current/` (Vérification d'état de la caisse)
+- **Response JSON si caisse fermée (200 OK) :**
+```json
+{
+  "has_open_session": false,
+  "detail": "Aucune session ouverte actuellement."
+}
+```
+- **Response JSON si caisse ouverte (200 OK) :**
+```json
+{
+  "has_open_session": true,
+  "id": 12,
+  "cashier": 3,
+  "cashier_username": "caissier_fatou",
+  "session_date": "2026-08-27",
+  "opened_at": "2026-08-27T08:00:00Z",
+  "initial_cash": "25000.00",
+  "expected_cash": "145000.00",
+  "actual_cash_counted": null,
+  "cash_difference": null,
+  "status": "OPEN",
+  "total_sales_count": 18
+}
+```
+
 #### `POST /api/pharmacy/pos/session/open/`
 - **Body JSON :**
 ```json
 {
   "initial_cash": "25000.00",
-  "notes": "Fonds de caisse matin"
+  "notes": "Fond de caisse initial du matin"
+}
+```
+- **Response JSON Succès (201 Created) :**
+```json
+{
+  "id": 12,
+  "cashier_username": "caissier_fatou",
+  "session_date": "2026-08-27",
+  "opened_at": "2026-08-27T08:00:00Z",
+  "initial_cash": "25000.00",
+  "expected_cash": "25000.00",
+  "actual_cash_counted": null,
+  "cash_difference": null,
+  "status": "OPEN",
+  "total_sales_count": 0
+}
+```
+- **Response JSON Erreur si caisse déjà ouverte (400 Bad Request) :**
+```json
+{
+  "code": "SESSION_ALREADY_OPEN",
+  "error": "Une session de caisse est déjà ouverte pour ce caissier. Veuillez clôturer la session active avant d'en ouvrir une nouvelle.",
+  "session": {
+    "id": 12,
+    "session_date": "2026-08-27",
+    "initial_cash": "25000.00",
+    "expected_cash": "145000.00",
+    "status": "OPEN"
+  }
 }
 ```
 
@@ -518,25 +669,32 @@ pharmaback-frontend/
 - **Body JSON :**
 ```json
 {
-  "actual_cash_counted": "185000.00",
-  "notes": "Écart vérifié"
+  "actual_cash_counted": "145000.00",
+  "notes": "Comptage validé avec le titulaire"
 }
 ```
 - **Response JSON (200 OK) :**
 ```json
 {
-  "id": 1,
-  "session_date": "2026-08-26",
+  "id": 12,
+  "cashier_username": "caissier_fatou",
+  "session_date": "2026-08-27",
+  "opened_at": "2026-08-27T08:00:00Z",
+  "closed_at": "2026-08-27T18:00:00Z",
   "initial_cash": "25000.00",
-  "expected_cash": "185000.00",
-  "actual_cash_counted": "185000.00",
+  "expected_cash": "145000.00",
+  "actual_cash_counted": "145000.00",
   "cash_difference": "0.00",
-  "status": "CLOSED"
+  "status": "CLOSED",
+  "notes": "Comptage validé avec le titulaire",
+  "total_sales_count": 18
 }
 ```
 
 #### `POST /api/pharmacy/pos/checkout/`
-- **Body JSON (Paiement Espèce avec calcul de monnaie) :**
+
+##### Option A : Paiement Simple (Ex: Espèces avec rendu de monnaie)
+- **Body JSON :**
 ```json
 {
   "items": [
@@ -546,52 +704,125 @@ pharmaback-frontend/
   "amount_received": "5000.00"
 }
 ```
-- **Body JSON (Paiement Wave / OMoney / Compte Client) :**
+
+##### Option B : Paiement Mixte / Échelonné (Ex: 17 000 FCFA -> 10 000 Espèces + 7 000 Wave)
+- **Body JSON :**
 ```json
 {
   "items": [
-    { "product_id": 1, "quantity": 1 }
+    { "product_id": 12, "quantity": 1, "unit_price": "17000.00" }
   ],
-  "payment_method": "WAVE",
-  "customer_id": null
+  "payment_method": "MIXTE",
+  "payments": [
+    { "method": "ESPECE", "amount": "10000.00" },
+    { "method": "WAVE", "amount": "7000.00" }
+  ],
+  "amount_received": "10000.00"
 }
 ```
-- **Response JSON (201 Created) :**
+*(Remarque : Dans ce cas, le fond de caisse n'est incrémenté que des 10 000 FCFA d'espèces. Le reste est tracé en Wave).*
+
+- **Response JSON Erreur si caisse non ouverte (400 Bad Request) :**
+```json
+{
+  "code": "CASH_SESSION_REQUIRED",
+  "error": "Aucune session de caisse ouverte pour ce caissier. Veuillez ouvrir la caisse avant d'effectuer un encaissement."
+}
+```
+
+- **Response JSON Succès (201 Created) :**
 ```json
 {
   "id": 1,
-  "ticket_number": "VTE-20260826-4821",
+  "ticket_number": "VTE-20260828-4821",
   "cashier_username": "caissier_fatou",
   "customer": null,
   "customer_name": null,
-  "total_ht": "3000.00",
+  "total_ht": "17000.00",
   "total_tva": "0.00",
-  "total_ttc": "3000.00",
-  "payment_method": "ESPECE",
-  "payment_method_display": "Espèces",
-  "amount_received": "5000.00",
-  "change_returned": "2000.00",
+  "total_ttc": "17000.00",
+  "payment_method": "MIXTE",
+  "payment_method_display": "Paiement Mixte",
+  "payment_details": [
+    { "method": "ESPECE", "amount": "10000.00" },
+    { "method": "WAVE", "amount": "7000.00" }
+  ],
+  "amount_received": "10000.00",
+  "change_returned": "0.00",
   "status": "PAID",
   "items": [
     {
       "id": 1,
-      "product": 1,
-      "product_name": "Doliprane 1000mg Comprimés",
-      "product_barcode": "3400930000010",
+      "product": 12,
+      "product_name": "Tensiomètre Électronique",
+      "product_barcode": "3400939999999",
       "batch_number": "LOT-202610-0010",
-      "expiration_date": "2026-10-31",
-      "quantity": 2,
-      "unit_price": "1500.00",
-      "total_price": "3000.00"
+      "expiration_date": "2027-10-31",
+      "quantity": 1,
+      "unit_price": "17000.00",
+      "total_price": "17000.00"
     }
   ],
-  "created_at": "2026-08-26T12:30:00Z"
+  "created_at": "2026-08-28T15:30:00Z"
 }
 ```
 
+#### `GET /api/pharmacy/pos/sales/` (Historique des Ventes & Facturation)
+- **Query Params supportés :**
+  - `?cashier_username=caissier_fatou` *(Filtre par caissier)*
+  - `?date=2026-08-27` *(Filtre par date)*
+  - `?payment_method=ESPECE|WAVE|OMONEY|COMPTE_CLIENT` *(Filtre par mode)*
+  - `?search=VTE-2026` *(Recherche par ticket ou client)*
+  - `?ordering=-created_at` *(Tri antéchronologique)*
+- **Response JSON (200 OK) :**
+```json
+{
+  "count": 1,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": 1,
+      "ticket_number": "VTE-20260827-4821",
+      "cash_session": 12,
+      "cashier": 3,
+      "cashier_username": "caissier_fatou",
+      "customer": null,
+      "customer_name": null,
+      "total_ht": "3000.00",
+      "total_tva": "0.00",
+      "total_ttc": "3000.00",
+      "payment_method": "ESPECE",
+      "payment_method_display": "Espèces",
+      "amount_received": "5000.00",
+      "change_returned": "2000.00",
+      "status": "PAID",
+      "status_display": "Payé",
+      "items": [
+        {
+          "id": 1,
+          "product": 1,
+          "product_name": "Doliprane 1000mg Comprimés",
+          "product_barcode": "3400930000010",
+          "batch_number": "LOT-202610-0010",
+          "expiration_date": "2026-10-31",
+          "quantity": 2,
+          "unit_price": "1500.00",
+          "total_price": "3000.00"
+        }
+      ],
+      "created_at": "2026-08-27T12:30:00Z"
+    }
+  ]
+}
+```
+
+#### `GET /api/pharmacy/pos/sales/{id}/` (Détail Ticket & Impression / Facture)
+- **Response JSON (200 OK) :** Renvoie l'objet vente complet avec ses lignes pour ré-impression thermique ou génération de facture PDF.
+
 ---
 
-### 6. Comptes Clients & Ventes à Crédit
+### 7. Comptes Clients & Ventes à Crédit
 
 #### `GET /api/pharmacy/customers/accounts/`
 - **Response JSON (200 OK) :**
@@ -631,9 +862,25 @@ pharmaback-frontend/
 }
 ```
 
+#### `GET /api/pharmacy/customers/accounts/{id}/statement/?month=2026-08`
+- **Response JSON (200 OK) :**
+```json
+{
+  "customer_id": 1,
+  "customer_name": "Mamadou Ndiaye",
+  "phone": "771234567",
+  "account_type": "PREPAID",
+  "current_balance": "35000.00",
+  "credit_limit": "5000.00",
+  "total_deposits_period": "25000.00",
+  "total_purchases_period": "0.00",
+  "transactions": []
+}
+```
+
 ---
 
-### 7. Fournisseurs, Commandes & Réclamations
+### 8. Fournisseurs, Commandes & Réclamations
 
 #### `GET /api/pharmacy/suppliers/`
 - **Response JSON (200 OK) :**
@@ -662,61 +909,6 @@ pharmaback-frontend/
   "order_website_url": "https://portail.laborex.sn"
 }
 ```
-
----
-
-### 8. Dépenses d'Exploitation (Description et Reçu Optionnels)
-
-#### `POST /api/pharmacy/billing/expenses/`
-- **Body JSON (Création simple et rapide) :**
-```json
-{
-  "category": 1,
-  "amount": "15000.00",
-  "payment_method": "ESPECE",
-  "date": "2026-08-26",
-  "description": ""
-}
-```
-*(Remarque : `description` et `receipt_file` sont facultatifs).*
-- **Response JSON (201 Created) :**
-```json
-{
-  "id": 1,
-  "category": 1,
-  "category_name": "Loyer Officine",
-  "amount": "15000.00",
-  "payment_method": "ESPECE",
-  "payment_method_display": "Espèces",
-  "description": "",
-  "receipt_file": null,
-  "date": "2026-08-26",
-  "created_by": 2,
-  "created_by_username": "pharmacien_ali",
-  "created_at": "2026-08-26T14:00:00Z",
-  "updated_at": "2026-08-26T14:00:00Z"
-}
-```
-
-#### `GET /api/pharmacy/customers/accounts/{id}/statement/?month=2026-08`
-- **Response JSON (200 OK) :**
-```json
-{
-  "customer_id": 1,
-  "customer_name": "Mamadou Ndiaye",
-  "phone": "771234567",
-  "account_type": "PREPAID",
-  "current_balance": "35000.00",
-  "credit_limit": "5000.00",
-  "total_deposits_period": "25000.00",
-  "total_purchases_period": "0.00",
-  "transactions": []
-}
-```
-
----
-
-### 7. Fournisseurs, Commandes & Réclamations
 
 #### `POST /api/pharmacy/suppliers/orders/generate-from-sales/?period=today|week`
 - **Body JSON :**
@@ -777,7 +969,38 @@ pharmaback-frontend/
 
 ---
 
-### 8. Dépenses & États Financiers Consolidés
+### 9. Dépenses d'Exploitation & États Financiers Consolidés
+
+#### `POST /api/pharmacy/billing/expenses/`
+- **Body JSON (Création simple et rapide) :**
+```json
+{
+  "category": 1,
+  "amount": "15000.00",
+  "payment_method": "ESPECE",
+  "date": "2026-08-26",
+  "description": ""
+}
+```
+*(Remarque : `description` et `receipt_file` sont facultatifs).*
+- **Response JSON (201 Created) :**
+```json
+{
+  "id": 1,
+  "category": 1,
+  "category_name": "Loyer Officine",
+  "amount": "15000.00",
+  "payment_method": "ESPECE",
+  "payment_method_display": "Espèces",
+  "description": "",
+  "receipt_file": null,
+  "date": "2026-08-26",
+  "created_by": 2,
+  "created_by_username": "pharmacien_ali",
+  "created_at": "2026-08-26T14:00:00Z",
+  "updated_at": "2026-08-26T14:00:00Z"
+}
+```
 
 #### `GET /api/pharmacy/financial-statement/?period=today|week|month|custom&start_date=2026-08-01&end_date=2026-08-31`
 - **Response JSON (200 OK) :**
@@ -853,7 +1076,12 @@ Dans la vue Équipe (`/settings/team`), lors de la création d'un utilisateur, l
 2. *Saisir sur place avec l'employé* : Champ de saisie classique du mot de passe avec confirmation.
 3. *Générer et envoyer par email* : Génération automatique et envoi des identifiants via l'API.
 
-### C. Caisse POS & Scan Hybride (Mobile & Desktop)
+### C. Caisse POS, Scan Hybride & Top 10 Produits Phares
+- **Top 10 Produits Phares (Quick-Add) :**
+  - À côté de la barre de recherche et du panier, un panneau de cartes d'accès rapide affiche les **10 produits les plus vendus** (`GET /api/pharmacy/pos/top-products/`).
+  - Un simple clic sur une carte ajoute instantanément 1 unité au panier.
+- **Contrôle Strict de Caisse :**
+  - Au chargement du POS, vérifier `GET /api/pharmacy/pos/session/current/`. Si `has_open_session === false`, afficher la modale bloquante "Ouverture de Caisse" (saisie du fond de caisse initial) et désactiver l'encaissement.
 - **Desktop (Douchette USB) :** Listener global sur les frappes rapides de code-barres (EAN-13/CIP) permettant d'ajouter instantanément le produit au panier sans focus préalable.
 - **Mobile (Caméra Barcode Scanner) :**
   - Modal caméra avec détection automatique (via `html5-qrcode` ou `@zxing/library`).

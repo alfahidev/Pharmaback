@@ -90,7 +90,8 @@ DATABASES = {
         "PASSWORD": os.getenv("DB_PASSWORD", "pharma_pass"),
         "HOST": os.getenv("DB_HOST", "localhost"),
         "PORT": os.getenv("DB_PORT", "5432"),
-        "CONN_MAX_AGE": 0,  # Ensure fresh connection handling with RLS transaction scope
+        "CONN_MAX_AGE": int(os.getenv("CONN_MAX_AGE", "60")),
+        "CONN_HEALTH_CHECKS": True,
         "OPTIONS": {
             "connect_timeout": 10,
         },
@@ -186,13 +187,37 @@ SIMPLE_JWT = {
     "TOKEN_OBTAIN_SERIALIZER": "apps.authentication.serializers.CustomTokenObtainPairSerializer",
 }
 
-# CORS configuration
+# CORS & CSRF configuration
+# Source: https://docs.djangoproject.com/en/6.0/ref/settings/#csrf-trusted-origins
 CORS_ALLOWED_ORIGINS = [
     origin.strip() for origin in os.getenv(
-        "CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173"
+        "CORS_ALLOWED_ORIGINS",
+        "https://pharmacy.melakhtelecom.com,https://api.pharmacy.melakhtelecom.com,http://localhost:3000,http://localhost:5173,http://localhost:5174"
     ).split(",") if origin.strip()
 ]
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+    "x-tenant-id",
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip() for origin in os.getenv(
+        "CSRF_TRUSTED_ORIGINS",
+        "https://pharmacy.melakhtelecom.com,https://api.pharmacy.melakhtelecom.com,http://localhost:3000,http://localhost:5173,http://localhost:5174"
+    ).split(",") if origin.strip()
+]
+
+# OpenAPI / Swagger Documentation toggle
+ENABLE_SWAGGER = os.getenv("ENABLE_SWAGGER", str(DEBUG)).lower() in ("true", "1", "yes")
 
 # DRF Spectacular OpenAPI documentation
 SPECTACULAR_SETTINGS = {

@@ -35,7 +35,7 @@ class SupplierViewSet(TenantModelViewSet):
     serializer_class = SupplierSerializer
     permission_classes = [IsPharmacistOrAbove]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ["name", "phone", "email", "contact_person"]
+    search_fields = ["name", "phone", "contact_person"]
     ordering_fields = ["name", "created_at"]
     ordering = ["name"]
 

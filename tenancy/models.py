@@ -43,6 +43,7 @@ class Tenant(models.Model):
     is_active = models.BooleanField(default=True, verbose_name=_("Officine active"))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Date de création"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("Date de mise à jour"))
+    auto_print = models.BooleanField(default=False, verbose_name=_("Impression automatique des reçus"))
 
     class Meta:
         db_table = "tenants"

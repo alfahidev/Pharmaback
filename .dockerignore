@@ -1,0 +1,59 @@
+# Git
+.git/
+.gitignore
+
+# Python virtual environments
+wenv/
+linenv/
+venv/
+env/
+.venv/
+scratch/
+.env
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Gemini/AI related
+.gemini/
+ai.py
+
+# Logs and databases
+logs/
+*.log
+celerybeat-schedule
+db.sqlite3
+db.sqlite3-journal
+
+# Environment variables (SECURITY)
+.env
+.env.*
+!.env.example
+
+# Media and User Uploads (should be managed by volumes or S3)
+media/
+backups/
+
+# Documentation, mocks, and notes (saves image size)
+*.md
+!README.md
+*.json
+*.png
+*.jpg
+error.txt
+response.txt
+graphify-out/
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker-related
+docker-compose.yaml
+docker-compose.yml

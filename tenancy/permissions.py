@@ -21,7 +21,7 @@ class IsTenantAdmin(BasePermission):
             and request.user.is_authenticated
             and (
                 request.user.is_superuser
-                or getattr(request.user, "role", "") in ("ADMIN", "TITULAIRE", "SAAS_OWNER")
+                or getattr(request.user, "role", "") in ("ADMIN", "TITULAIRE")
             )
         )
 
@@ -43,7 +43,7 @@ class IsCashierOrAbove(BasePermission):
             request.user
             and request.user.is_authenticated
             and (
-                getattr(request.user, "role", "") in ("CAISSIER", "PHARMACIEN", "ADMIN", "TITULAIRE", "SAAS_OWNER")
+                getattr(request.user, "role", "") in ("CAISSIER", "PHARMACIEN", "ADMIN", "TITULAIRE","COMPTABLE")
                 or request.user.is_superuser
             )
         )
@@ -56,7 +56,7 @@ class IsPharmacistOrAbove(BasePermission):
             request.user
             and request.user.is_authenticated
             and (
-                getattr(request.user, "role", "") in ("PHARMACIEN", "ADMIN", "TITULAIRE", "SAAS_OWNER")
+                getattr(request.user, "role", "") in ("PHARMACIEN", "ADMIN", "TITULAIRE")
                 or request.user.is_superuser
             )
         )
@@ -69,7 +69,7 @@ class IsAccountantOrAbove(BasePermission):
             request.user
             and request.user.is_authenticated
             and (
-                getattr(request.user, "role", "") in ("COMPTABLE", "ADMIN", "TITULAIRE", "SAAS_OWNER")
+                getattr(request.user, "role", "") in ("COMPTABLE", "ADMIN", "TITULAIRE")
                 or request.user.is_superuser
             )
         )
